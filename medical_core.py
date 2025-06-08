@@ -16,86 +16,204 @@ class TraumaAssessmentOutput:
     assessment_steps: List[str]
     red_flags: List[str]
     next_steps: List[str]
+    protocol_source: str # Added for Ranger protocol
 
-def perform_trauma_assessment(patient_data: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Performs a generic trauma assessment based on patient data.
-    Input is a dictionary, expected to match TraumaAssessmentInput structure.
-    Output is a dictionary, matching TraumaAssessmentOutput structure.
-    """
-    # Basic validation (FastAPI with Pydantic will handle more robust validation at API layer)
-    if not all(key in patient_data for key in ["mechanismOfInjury", "reportedSymptoms", "conscious"]):
-        # In a real MCP, this might return a structured error or raise a specific exception
-        return {
-            "severity_level": "unknown",
-            "immediate_actions": ["Error: Missing required patient data (mechanismOfInjury, reportedSymptoms, conscious)."],
-            "assessment_steps": [],
-            "red_flags": ["Missing critical input data."],
-            "next_steps": ["Re-submit with complete data."]
+# Enhanced medical_core.py with Army Ranger Handbook protocols
+
+RANGER_LIFESAVING_STEPS = {
+    "priority_order": [
+        "stop_life_threatening_bleeding",
+        "open_airway_restore_breathing",
+        "stop_bleeding_protect_wound",
+        "treat_monitor_shock",
+        "prepare_medevac"
+    ]
+}
+
+RANGER_CARE_UNDER_FIRE = {
+    "immediate_actions": [
+        "maintain_situational_awareness",
+        "return_fire",
+        "determine_casualty_status",
+        "casualty_self_aide",
+        "protect_casualty",
+        "move_to_cover",
+        "control_severe_bleeding_tourniquet"
+    ]
+}
+
+RANGER_ABC_PROTOCOL = {
+    "airway": {
+        "assessment": "Check for obstruction at base of tongue",
+        "non_trauma": "Use chin lift method",
+        "trauma": "Use jaw thrust method",
+        "debris_removal": "Remove teeth, blood clots, bone from oral cavity",
+        "adjuncts": ["nasal_airway", "oral_airway"]
+    },
+    "breathing": {
+        "assessment": "Expose chest, identify open wounds",
+        "open_chest_wounds": "Apply occlusive dressing to entry/exit wounds",
+        "positioning": "Place on injured side or comfortable position"
+    },
+    "circulation": {
+        "bleeding_control": {
+            "arterial_extremity": "Tourniquet 2-3 inches above elbow/knee",
+            "multiple_tourniquets": "Apply second above first if bleeding continues",
+            "other_bleeding": "Pressure dressing",
+            "monitoring": "Check dressings frequently"
         }
+    }
+}
 
-    mechanism = patient_data.get("mechanismOfInjury", "").lower()
-    symptoms = [s.lower() for s in patient_data.get("reportedSymptoms", [])]
-    is_conscious = patient_data.get("conscious", False)
-    has_obvious_bleeding = patient_data.get("obviousBleeding", False)
-
-    severity_level: Literal["critical", "serious", "moderate", "minor", "unknown"] = "unknown"
-    immediate_actions: List[str] = ["Ensure scene safety.", "Call for emergency medical services if possible and not already done."]
-    assessment_steps: List[str] = [
-        "Check for responsiveness (AVPU: Alert, Verbal, Painful, Unresponsive).",
-        "Assess Airway (A): Is it clear? Any obstructions? Consider C-spine immobilization if trauma mechanism suggests.",
-        "Assess Breathing (B): Rate, depth, effort. Look for chest rise and fall. Check for cyanosis.",
-        "Assess Circulation (C): Check for major bleeding. Check pulse (rate, rhythm, strength). Check skin color, temperature, and capillary refill.",
-        "Assess Disability (D): Neurological status (e.g., GCS if trained, pupil response, orientation).",
-        "Expose and Examine (E): Systematically check for injuries from head to toe, maintaining spinal precautions if suspected neck/back injury. Keep patient warm.",
+RANGER_SHOCK_PROTOCOL = {
+    "definition": "Inadequate oxygen flow to body tissues",
+    "primary_cause": "Hemorrhagic shock from uncontrolled bleeding",
+    "signs_symptoms": [
+        "sweaty_cool_clammy_skin",
+        "pale_skin",
+        "restlessness_nervousness_agitation",
+        "unusual_thirst",
+        "altered_mental_status",
+        "rapid_breathing",
+        "blotchy_bluish_skin_around_mouth",
+        "nausea"
+    ],
+    "treatment_sequence": [
+        "control_bleeding",
+        "open_airway",
+        "restore_breathing",
+        "position_casualty",
+        "monitor_condition",
+        "evacuate_casualty"
     ]
-    red_flags: List[str] = [
-        "Unresponsiveness or significantly altered mental status.",
-        "Difficulty breathing, gasping, or no breathing.",
-        "Absent or very weak pulse, signs of shock (pale, cool, clammy skin).",
-        "Severe, uncontrolled external bleeding.",
-        "Penetrating trauma to head, neck, chest, or abdomen.",
-        "Suspected spinal injury (e.g., fall from height, diving accident, high-speed MVA).",
-        "Open fractures or severe deformities."
-    ]
-    next_steps: List[str] = [
-        "Reassess ABCDEs frequently (e.g., every 5 minutes for critical, 15 for stable).",
-        "Treat life-threatening injuries found during assessment immediately (e.g., control major bleeding, basic airway maneuvers, CPR if indicated).",
-        "Maintain body temperature (prevent hypothermia).",
-        "Gather SAMPLE history if possible (Signs/Symptoms, Allergies, Medications, Past medical history, Last oral intake, Events leading to injury).",
-        "Prepare for transport or await arrival of higher-level care.",
+}
+
+RANGER_TRAUMA_PROCEDURES = {
+    "extremity_injuries": {
+        "steps": [
+            "identify_control_bleeding",
+            "suspect_fracture_splint_as_lies",
+            "do_not_reposition_extremity",
+            "check_distal_pulse_after_splinting",
+            "no_pulse_redo_splint_reassess"
+        ]
+    },
+    "abdominal_injuries": {
+        "steps": [
+            "identify_control_bleeding",
+            "treat_for_shock",
+            "exposed_organs_dry_sterile_dressing",
+            "do_not_replace_organs_in_cavity",
+            "comfortable_position_flex_knees",
+            "nothing_by_mouth"
+        ]
+    }
+}
+
+RANGER_ENVIRONMENTAL_PROTOCOLS = {
+    "heat_injuries": {
+        "heat_cramp": {
+            "symptoms": "muscle_cramps_arms_legs_stomach_wet_skin_extreme_thirst",
+            "treatment": [
+                "move_to_shade_loosen_clothing",
+                "one_quart_cool_water_slowly_hourly",
+                "monitor_provide_water_as_needed"
+            ]
+        },
+        "heat_exhaustion": {
+            "symptoms": "loss_appetite_headache_excessive_sweating_weakness_dizziness_nausea_muscle_cramps_moist_pale_clammy_skin",
+            "treatment": [
+                "move_cool_shade_loosen_clothing",
+                "pour_water_fan_increase_evaporation",
+                "one_quart_water_replace_fluids",
+                "elevate_legs"
+            ]
+        },
+        "heat_stroke": {
+            "symptoms": "stops_sweating_hot_dry_skin_headache_dizziness_nausea_rapid_pulse_seizures_confusion_collapse_unconsciousness",
+            "treatment": [
+                "move_cool_shade_remove_clothing",
+                "immerse_cool_water_or_pour_on_head_body",
+                "fan_increase_cooling_evaporation",
+                "conscious_slowly_consume_one_quart_water"
+            ],
+            "warning": "MEDICAL EMERGENCY - evacuate immediately"
+        }
+    },
+    "snake_bite": {
+        "treatment": [
+            "get_casualty_away_from_snake",
+            "remove_rings_bracelets_affected_extremity",
+            "reassure_keep_quiet",
+            "constricting_band_2_3_inches_above_bite",
+            "immobilize_limb_below_heart_level",
+            "treat_for_shock_monitor",
+            "kill_snake_send_with_casualty",
+            "evacuate_immediately"
+        ]
+    }
+}
+
+def perform_ranger_trauma_assessment(patient_data):
+    """Enhanced trauma assessment using Army Ranger protocols"""
+
+    # Determine severity using Ranger criteria
+    # These functions would need to be implemented based on Ranger Handbook logic
+    # For now, placeholder logic or direct use of patient_data
+    # Example: severity = assess_ranger_severity(patient_data)
+    severity = "unknown" # Placeholder
+    if not patient_data.get("conscious", True):
+        severity = "critical"
+    elif patient_data.get("obviousBleeding", False):
+        severity = "serious"
+
+
+    # Generate Ranger-specific immediate actions
+    # Example: immediate_actions = generate_ranger_immediate_actions(patient_data, severity)
+    immediate_actions = RANGER_CARE_UNDER_FIRE["immediate_actions"][:] # Use a copy
+    if severity == "critical" and "control_severe_bleeding_tourniquet" not in immediate_actions:
+         immediate_actions.append("control_severe_bleeding_tourniquet")
+
+
+    # Generate ABC assessment steps
+    # Example: assessment_steps = generate_ranger_abc_assessment(patient_data)
+    assessment_steps = [
+        f"Airway: {RANGER_ABC_PROTOCOL['airway']['assessment']}. If trauma, use {RANGER_ABC_PROTOCOL['airway']['trauma']}.",
+        f"Breathing: {RANGER_ABC_PROTOCOL['breathing']['assessment']}. If open chest wound, {RANGER_ABC_PROTOCOL['breathing']['open_chest_wounds']}.",
+        f"Circulation: Control arterial bleeding with {RANGER_ABC_PROTOCOL['circulation']['bleeding_control']['arterial_extremity']}."
     ]
 
-    if not is_conscious:
-        severity_level = "critical"
-        immediate_actions.insert(1, "If not breathing or only gasping, begin CPR immediately if trained and appropriate.")
-        red_flags.append("Patient is unconscious.")
-    elif has_obvious_bleeding or "severe bleeding" in symptoms:
-        severity_level = "critical" if "arterial" in mechanism else "serious"
-        immediate_actions.insert(1, "Apply direct pressure to any sites of major bleeding. Elevate if possible. Consider tourniquet for life-threatening limb hemorrhage.")
-        red_flags.append("Obvious or reported severe bleeding.")
-    elif any(s in symptoms for s in ["difficulty breathing", "shortness of breath", "no breathing", "gasping"]):
-        severity_level = "critical"
-        immediate_actions.insert(1, "Ensure airway is open. Assist ventilations if necessary and trained.")
-        red_flags.append("Reported difficulty breathing or abnormal breathing pattern.")
-    elif "fall from height" in mechanism or "motor vehicle accident" in mechanism or "diving accident" in mechanism:
-        severity_level = "serious" # Could be critical depending on other factors
-        immediate_actions.append("Maintain spinal immobilization if suspected neck/back injury.")
-        red_flags.append("High-risk mechanism of injury (potential for internal or spinal injuries).")
-    else:
-        severity_level = "moderate" # Default for conscious patient without immediate critical signs
+    # Generate Ranger red flags
+    # Example: red_flags = generate_ranger_red_flags(patient_data)
+    red_flags = []
+    if severity == "critical":
+        red_flags.append("CRITICAL CASUALTY - IMMEDIATE EVACUATION REQUIRED.")
+    if any(symptom in RANGER_SHOCK_PROTOCOL["signs_symptoms"] for symptom in patient_data.get("reportedSymptoms", [])):
+        red_flags.append("Signs of shock present.")
 
-    if "chest pain" in symptoms:
-        red_flags.append("Reported chest pain - consider cardiac or significant thoracic trauma.")
-        if severity_level not in ["critical", "serious"]: severity_level = "serious"
+
+    # Generate next steps based on Ranger protocols
+    # Example: next_steps = generate_ranger_next_steps(patient_data, severity)
+    next_steps = RANGER_LIFESAVING_STEPS["priority_order"][:] # Use a copy
+    if "heat_stroke" in patient_data.get("reportedSymptoms", []): # Example integration
+        next_steps.extend(RANGER_ENVIRONMENTAL_PROTOCOLS["heat_injuries"]["heat_stroke"]["treatment"])
+        next_steps.append(RANGER_ENVIRONMENTAL_PROTOCOLS["heat_injuries"]["heat_stroke"]["warning"])
+
 
     return {
-        "severity_level": severity_level,
+        "severity_level": severity,
         "immediate_actions": immediate_actions,
         "assessment_steps": assessment_steps,
         "red_flags": red_flags,
         "next_steps": next_steps,
+        "protocol_source": "US Army Ranger Handbook Chapter 15"
     }
+# Note: The helper functions assess_ranger_severity, generate_ranger_immediate_actions,
+# generate_ranger_abc_assessment, generate_ranger_red_flags, and generate_ranger_next_steps
+# are not defined in the provided snippet and would need to be implemented
+# for the perform_ranger_trauma_assessment function to be fully functional
+# as described by its comments. The current implementation uses placeholder logic
+# or directly references the RANGER_* dictionaries.
 
 # Example usage (for testing this module directly)
 if __name__ == "__main__":
