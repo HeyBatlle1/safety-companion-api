@@ -5,3 +5,4 @@ supabase
 google-generativeai
 requests
 python-dotenv
+httpx>=0.24.0
